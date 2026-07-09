@@ -270,6 +270,11 @@ import router from '@/router';
 
 const PAGE_SIZE = 10;
 
+// Virtual status used only in the UI. There is no matching DB status; a log is
+// "finished with errors" when statusId === 'DmlsFinished' && failedRecordCount > 0.
+// This pattern is consistent with Pipeline.vue.
+const DMLS_FINISHED_WITH_ERRORS = "DmlsFinishedWithErrors";
+
 const mdmStore = useMdmConfigStore();
 const utilStore = useUtilStore();
 
@@ -282,13 +287,17 @@ const pageIndex = ref(0);
 
 const rawLogs = computed(() => mdmStore.getLogs);
 const configs = computed(() => mdmStore.getConfigs);
-const statusItems = computed(() => utilStore.getStatusItemsByType("DataManagerLog"));
+const statusItems = computed(() => [
+  ...utilStore.getStatusItemsByType("DataManagerLog"),
+  { statusId: DMLS_FINISHED_WITH_ERRORS, description: "Finished with errors" }
+]);
 
 const isServerSideSearch = computed(() => {
   const q = queryString.value.trim();
   const isServerSideQ = !q || q.startsWith("M") || !isNaN(Number(q));
   const hasPriorityFilter = selectedPriority.value.length > 0;
-  return isServerSideQ && !hasPriorityFilter;
+  const hasVirtualStatusFilter = selectedStatus.value.includes(DMLS_FINISHED_WITH_ERRORS);
+  return isServerSideQ && !hasPriorityFilter && !hasVirtualStatusFilter;
 });
 
 const filteredLogs = computed(() => {
@@ -309,6 +318,10 @@ const filteredLogs = computed(() => {
       const isHigh = config.priority > 6;
       return selectedPriority.value.includes(isHigh ? "HIGH" : "NORMAL");
     });
+  }
+
+  if (selectedStatus.value.includes(DMLS_FINISHED_WITH_ERRORS)) {
+    result = result.filter((log: any) => log.statusId === "DmlsFinished" && Number(log.failedRecordCount || 0) > 0);
   }
 
   return result;
@@ -437,7 +450,14 @@ const toggleConfig = (configId: string, checked: boolean) => {
 async function fetchLogs() {
   const filters: Record<string, any> = {};
 
-  if (selectedStatus.value.length > 0) filters["statusId"] = selectedStatus.value;
+  if (selectedStatus.value.length > 0) {
+    // Translate the virtual status to its real DB equivalent before sending to the server.
+    // Client-side filtering in filteredLogs handles the failedRecordCount > 0 constraint.
+    const serverStatuses = [...new Set(selectedStatus.value.map((s) =>
+      s === DMLS_FINISHED_WITH_ERRORS ? "DmlsFinished" : s
+    ))];
+    filters["statusId"] = serverStatuses;
+  }
   // Priority is handled entirely client-side
   if (selectedConfig.value.length > 0) filters["configId"] = selectedConfig.value;
 

@@ -171,15 +171,20 @@ export const useMdmConfigStore = defineStore("mdmConfig", {
     async fetchGlobalStats() {
       const moquiStatuses = "DmlsCancelled,DmlsCrashed,DmlsFailed,DmlsFinished,DmlsPending,DmlsQueued,DmlsRunning"
       try {
-        const [totalResp, successResp, failedResp] = await Promise.all([
+        const [totalResp, allLogsResp] = await Promise.all([
           api({ url: "admin/dataManager/details", method: "get", params: { pageSize: 1, pageIndex: 0, statusId: moquiStatuses, statusId_op: "in" } }),
-          api({ url: "admin/dataManager/details", method: "get", params: { pageSize: 1, pageIndex: 0, statusId: "DmlsFinished" } }),
-          api({ url: "admin/dataManager/details", method: "get", params: { pageSize: 1, pageIndex: 0, statusId: "DmlsFailed,DmlsCrashed", statusId_op: "in" } })
+          api({ url: "admin/dataManager/details", method: "get", params: { pageSize: 1000, pageIndex: 0, statusId: moquiStatuses, statusId_op: "in" } })
         ])
+        const allLogs = allLogsResp.data?.dataManagerLogs || []
         this.globalStats = {
           total: totalResp.data?.dataManagerLogsCount || 0,
-          successful: successResp.data?.dataManagerLogsCount || 0,
-          failed: failedResp.data?.dataManagerLogsCount || 0
+          successful: allLogs.filter((log: any) =>
+            log.statusId === "DmlsFinished" && Number(log.failedRecordCount || 0) === 0
+          ).length,
+          failed: allLogs.filter((log: any) =>
+            ["DmlsFailed", "DmlsCrashed"].includes(log.statusId) ||
+            (log.statusId === "DmlsFinished" && Number(log.failedRecordCount || 0) > 0)
+          ).length
         }
       } catch (err) {
         logger.error("Failed to fetch global stats", err)
