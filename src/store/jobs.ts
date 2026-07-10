@@ -13,6 +13,32 @@ const getRunStatus = (run: any) => {
   return "TERMINATED";
 };
 
+const categoryKeywords: Record<string, string[]> = {
+  BROKER_SYS_JOB: ["broker", "route", "brokering", "routing"],
+  FULFILLMENT_SYS_JOB: ["fulfillment", "shipping", "shipment", "pack"],
+  PRE_ORD_SYS_JOB: ["preorder", "backorder"],
+  INVENTORY_SYS_JOB: ["inventory", "facility", "rule", "atp", "warehouse"],
+  PRODUCT_SYS_JOB: ["product", "catalog"],
+  IMPORT_SYS_JOB: ["import"],
+  UPLOAD_SYS_JOB: ["upload"],
+  NOTIFY_SYS_JOB: ["notification", "email", "mail"],
+  REPORT_SYS_JOB: ["report", "analytics"],
+  ORDER_SYS_JOB: ["order"],
+  MISC_SYS_JOB: ["system", "framework"]
+};
+
+const mapServiceToCategory = (serviceName: string, jobName: string) => {
+  const service = String(serviceName || "").toLowerCase();
+  const name = String(jobName || "").toLowerCase();
+
+  for (const [categoryId, keywords] of Object.entries(categoryKeywords)) {
+    if (keywords.some(keyword => service.includes(keyword) || name.includes(keyword))) {
+      return { productCategoryId: categoryId };
+    }
+  }
+  return null;
+};
+
 const getRunHistoryStats = (runs: Array<any>) => runs.reduce((stats: any, run: any) => {
   stats.total += 1;
   stats[run.runStatus] += 1;
@@ -75,7 +101,21 @@ export const useJobStore = defineStore("job", {
   getters: {
     getJobs: (state: any) => state.jobs,
     getCategories: (state: any) => state.categories,
-    getCategoryMembers: (state: any) => state.categoryMembers,
+    getCategoryMembers: (state: any) => {
+      const virtualMembers = [] as any[];
+      state.jobs.forEach((job: any) => {
+        if (job.jobName && !job.enumId) {
+          const mappedCat = mapServiceToCategory(job.serviceName, job.jobName);
+          if (mappedCat) {
+            virtualMembers.push({
+              productCategoryId: mappedCat.productCategoryId,
+              productId: job.instanceOfProductId || job.jobName
+            });
+          }
+        }
+      });
+      return [...state.categoryMembers, ...virtualMembers];
+    },
     getCategoryRollups: (state: any) => state.categoryRollups,
     getProducts: (state: any) => state.products,
     getJobRunHistory: (state: any) => state.jobRunHistory,
@@ -130,6 +170,29 @@ export const useJobStore = defineStore("job", {
           this.jobs = pageIndex > 0 ? this.jobs.concat(respJobs) : respJobs
           pageIndex++
         } while(total == 250)
+
+        // Separate templated and uncategorized jobs
+        const templatedJobs = this.jobs.filter((job: any) => job.instanceOfProductId);
+        const uncategorizedJobs = this.jobs.filter((job: any) => !job.instanceOfProductId);
+
+        // Sort templated jobs by name length descending to match longest prefix first
+        templatedJobs.sort((a: any, b: any) => b.jobName.length - a.jobName.length);
+
+        uncategorizedJobs.forEach((job: any) => {
+          const templateJob = templatedJobs.find((t: any) => job.jobName.startsWith(t.jobName));
+          if (templateJob) {
+            job.instanceOfProductId = templateJob.instanceOfProductId;
+            job.enumId = templateJob.enumId;
+            job.enumTypeId = templateJob.enumTypeId;
+            job.enumName = templateJob.enumName;
+            job.jobTypeEnumId = templateJob.jobTypeEnumId;
+          } else {
+            const mappedCat = mapServiceToCategory(job.serviceName, job.jobName);
+            if (mappedCat) {
+              job.instanceOfProductId = job.jobName;
+            }
+          }
+        });
       } catch(err) {
         logger.error("Failed to fetch jobs", err)
       } finally {
@@ -275,6 +338,24 @@ export const useJobStore = defineStore("job", {
           }
         } else {
           jobDetails = job
+        }
+
+        if (jobDetails && jobDetails.jobName && !jobDetails.instanceOfProductId) {
+          const templatedJobs = this.jobs.filter((j: any) => j.instanceOfProductId);
+          templatedJobs.sort((a: any, b: any) => b.jobName.length - a.jobName.length);
+          const templateJob = templatedJobs.find((t: any) => jobDetails.jobName.startsWith(t.jobName));
+          if (templateJob) {
+            jobDetails.instanceOfProductId = templateJob.instanceOfProductId;
+            jobDetails.enumId = templateJob.enumId;
+            jobDetails.enumTypeId = templateJob.enumTypeId;
+            jobDetails.enumName = templateJob.enumName;
+            jobDetails.jobTypeEnumId = templateJob.jobTypeEnumId;
+          } else {
+            const mappedCat = mapServiceToCategory(jobDetails.serviceName, jobDetails.jobName);
+            if (mappedCat) {
+              jobDetails.instanceOfProductId = jobDetails.jobName;
+            }
+          }
         }
       } catch(err) {
         logger.error("Failed to fetch jobs", err)
