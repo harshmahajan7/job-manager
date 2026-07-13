@@ -43,6 +43,7 @@
                   fill="outline"
                   auto-grow
                   :value="field.value || ''"
+                  :disabled="!hasPermission('SETUP_ADMIN OR COMMON_ADMIN')"
                   @ionInput="updateField(key, $event.detail.value || '')"
                 />
                 <ion-input
@@ -51,6 +52,7 @@
                   label-placement="stacked"
                   fill="outline"
                   :readonly="!isCreateMode && key === 'systemMessageTypeId'"
+                  :disabled="!hasPermission('SETUP_ADMIN OR COMMON_ADMIN')"
                   :value="field.value || ''"
                   @ionInput="updateField(key, $event.detail.value || '')"
                 />
@@ -141,6 +143,7 @@ import { translate } from "@common";
 
 import SystemMessageList from "@/components/SystemMessageList.vue";
 import { useSystemMessageStore } from "@/store/systemMessage";
+import { useUserStore } from "@/store/user";
 import { showToast } from "@/utils";
 import { useUtilStore } from "@/store/util";
 import { caretBackOutline, caretForwardOutline } from "ionicons/icons";
@@ -152,6 +155,8 @@ const pageIndex = ref(0);
 
 const store = useSystemMessageStore();
 const utilStore = useUtilStore();
+const userStore = useUserStore();
+const hasPermission = computed(() => (permissionId: string) => userStore.hasPermission(permissionId));
 const queryString = ref("");
 const selectedStatusId = ref("");
 const form = reactive<Record<string, any>>({
@@ -204,6 +209,11 @@ const loadType = async() => {
 };
 
 const saveType = async () => {
+  if (!hasPermission.value('SETUP_ADMIN OR COMMON_ADMIN')) {
+    await showToast(translate("You don't have permission to change this"));
+    return;
+  }
+
   if (!form.systemMessageTypeId?.value.trim()) {
     await showToast(translate("Type ID is required."));
     return;
@@ -231,6 +241,11 @@ const saveType = async () => {
 };
 
 const deleteType = async () => {
+  if (!hasPermission.value('SETUP_ADMIN OR COMMON_ADMIN')) {
+    await showToast(translate("You don't have permission to change this"));
+    return;
+  }
+
   const result = await store.deleteSystemMessageType(props.id);
   if (result.error) {
     await showToast(translate("This message type cannot be deleted while messages still reference it."));

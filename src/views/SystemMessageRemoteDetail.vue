@@ -43,6 +43,7 @@
                   fill="outline"
                   auto-grow
                   :value="field.value || ''"
+                  :disabled="!hasPermission('SETUP_ADMIN OR COMMON_ADMIN')"
                   @ionInput="updateField(key, $event.detail.value || '')"
                 />
                 <ion-input
@@ -52,6 +53,7 @@
                   label-placement="stacked"
                   fill="outline"
                   :readonly="!isCreateMode && key === 'systemMessageRemoteId'"
+                  :disabled="!hasPermission('SETUP_ADMIN OR COMMON_ADMIN')"
                   :value="field.value || ''"
                   @ionInput="updateField(key, $event.detail.value || '')"
                 />
@@ -144,6 +146,7 @@ import { translate } from "@common";
 
 import SystemMessageList from "@/components/SystemMessageList.vue";
 import { useSystemMessageStore } from "@/store/systemMessage";
+import { useUserStore } from "@/store/user";
 import { showToast } from "@/utils";
 import { useUtilStore } from "@/store/util";
 import { caretBackOutline, caretForwardOutline } from "ionicons/icons";
@@ -156,6 +159,8 @@ const pageIndex = ref(0);
 
 const systemMessageStore = useSystemMessageStore();
 const utilStore = useUtilStore();
+const userStore = useUserStore();
+const hasPermission = computed(() => (permissionId: string) => userStore.hasPermission(permissionId));
 const queryString = ref("");
 const selectedStatusId = ref("");
 const form = reactive<Record<string, any>>({
@@ -216,6 +221,11 @@ const loadRemote = async () => {
 };
 
 const saveRemote = async () => {
+  if (!hasPermission.value('SETUP_ADMIN OR COMMON_ADMIN')) {
+    await showToast(translate("You don't have permission to change this"));
+    return;
+  }
+
   if (!form.systemMessageRemoteId?.value.trim()) {
     await showToast(translate("Remote ID is required."));
     return;
@@ -243,6 +253,11 @@ const saveRemote = async () => {
 };
 
 const deleteRemote = async () => {
+  if (!hasPermission.value('SETUP_ADMIN OR COMMON_ADMIN')) {
+    await showToast(translate("You don't have permission to change this"));
+    return;
+  }
+
   const result = await systemMessageStore.deleteSystemMessageRemote(props.id as string);
   if (result.error) {
     await showToast(translate("This remote system cannot be deleted while messages still reference it."));

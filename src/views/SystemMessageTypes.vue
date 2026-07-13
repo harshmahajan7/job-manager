@@ -5,7 +5,7 @@
         <ion-menu-button slot="start" />
         <ion-title>{{ translate("Message Types") }}</ion-title>
         <ion-buttons slot="end">
-          <ion-button @click="router.push('/system-message-types/new')">
+          <ion-button v-if="hasPermission('SETUP_ADMIN OR COMMON_ADMIN')" @click="router.push('/system-message-types/new')">
             {{ translate("Create") }}
           </ion-button>
         </ion-buttons>
@@ -74,9 +74,13 @@ import router from "../router";
 import { translate } from "@common";
 
 import { useSystemMessageStore } from "@/store/systemMessage";
+import { useUserStore } from "@/store/user";
 
 const store = useSystemMessageStore();
+const userStore = useUserStore();
 const queryString = ref("");
+
+const hasPermission = computed(() => (permissionId: string) => userStore.hasPermission(permissionId));
 
 const types = computed(() => store.getSystemMessageTypes);
 const filteredTypes = computed(() => {
